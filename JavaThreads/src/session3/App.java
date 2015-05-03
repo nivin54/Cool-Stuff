@@ -1,13 +1,13 @@
 package session3;
 /*
  * Thread can run parallel
- * So to synchroize we use join method. 
+ * So to synchronize we use join method. 
  * It join with the parent thread.
  * incrementing count is not an atomic operation. 
  * increment count is having total of 3 steps. 
  * Threads interleaving.
  * intrinsic lock, monitor.
- * If multiple threads. 
+ *  
  */
 
 
