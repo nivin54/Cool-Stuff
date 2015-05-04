@@ -5,9 +5,14 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 public class App {
+	/*
+	 * BQ will wait if the queue is full and when the consumer takes it, it will then again add the element. 
+	 * 
+	 */
 	
 	private BlockingQueue<Integer> queue = new ArrayBlockingQueue<Integer>(10); //It is thread safe.
 	public static void main(String[] args) {
+		System.out.println(" I am hello boy");
 		
 	}
 	private void producer() throws InterruptedException
@@ -28,10 +33,11 @@ public class App {
 			{
 				Integer value = queue.take();
 				System.out.println("Taken value " + value + "  Queue size is " + queue.size() );
-				
+					
 			}
 			
 		}
 	}
+	
 
 }
