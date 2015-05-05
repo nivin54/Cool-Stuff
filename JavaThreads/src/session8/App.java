@@ -26,7 +26,7 @@ public class App {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-			}		
+			}
 		});
 		t1.start();
 		t2.start();
@@ -37,6 +37,5 @@ public class App {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
 	}
 }
