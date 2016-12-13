@@ -1,0 +1,101 @@
+<pre style="background:#000;color:#f8f8f8"><span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;linux/init.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;linux/module.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;asm/io.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;mach/platform.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;linux/timer.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;linux/device.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;linux/err.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;linux/gpio.h></span></span>
+<span style="color:#8996a8">#<span style="color:#afc4db">include</span> <span style="color:#65b042">&lt;linux/interrupt.h></span></span>
+
+<span style="color:#89bdff">MODULE_LICENSE</span>("GPL");
+
+
+<span style="color:#aeaeae;font-style:italic">//Instead of using native gpio library, we are writing from scratch.</span>
+<span style="color:#99cf50">struct</span> <span style="text-decoration:underline">GpioRegisters</span>
+{
+    uint32_t GPFSEL[6]; // defines the function of the port.
+    uint32_t Reserved1;
+    uint32_t GPSET[2]; // sets the value for corresponding pin.
+    uint32_t Reserved2;
+    uint32_t GPCLR[2]; // clears the value 
+};
+
+<span style="color:#99cf50">struct</span> <span style="text-decoration:underline">GpioRegisters</span> *s_pGpioRegisters;
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">const</span> <span style="color:#99cf50">int</span> LedGpioPin1 = <span style="color:#3387cc">21</span>; <span style="color:#aeaeae;font-style:italic">// GPIO Output pin</span>
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">const</span> <span style="color:#99cf50">int</span> LedGpioPin2 = <span style="color:#3387cc">20</span>;
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">const</span> <span style="color:#99cf50">int</span> gpioButton = <span style="color:#3387cc">23</span>; <span style="color:#aeaeae;font-style:italic">// Button that is used for toggling.</span>
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">bool</span> on = <span style="color:#3387cc">false</span>;
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">unsigned</span> <span style="color:#99cf50">int</span> irqNumber;  <span style="color:#aeaeae;font-style:italic">// Irq Number to listens to. </span>
+
+<span style="color:#99cf50">static</span> irq_handler_t  <span style="color:#89bdff">ebbgpio_irq_handler</span>(unsigned int irq, void *dev_id, struct pt_regs *regs); <span style="color:#aeaeae;font-style:italic">// defines the interrupt handler function</span>
+
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">void</span> <span style="color:#89bdff">SetGPIOFunction</span>(int GPIO, int functionCode)
+{
+    int registerIndex = GPIO / 10;
+    int bit = (GPIO % 10) * 3;
+    unsigned oldValue = s_pGpioRegisters-> GPFSEL[registerIndex];
+    unsigned mask = 0b111 &lt;&lt; bit;
+    printk("Changing function of GPIO%d from %x to %x\n",
+           GPIO,
+           (oldValue >> bit) &amp; 0b111,
+           functionCode);
+    s_pGpioRegisters-> GPFSEL[registerIndex] =
+        (oldValue &amp; ~mask) | ((functionCode &lt;&lt; bit) &amp; mask);
+}
+
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">void</span> <span style="color:#89bdff">SetGPIOOutputValue</span>(int GPIO, bool outputValue)
+{
+    if (outputValue)
+        s_pGpioRegisters-> GPSET[GPIO / 32] = (1 &lt;&lt; (GPIO % 32));
+    else
+        s_pGpioRegisters-> GPCLR[GPIO / 32] = (1 &lt;&lt; (GPIO % 32));
+}
+
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">int</span> __init <span style="color:#89bdff">LedBlinkModule_init</span>(void)
+{
+   
+    printk(KERN_INFO "GPIO_TEST Welcome");
+    s_pGpioRegisters =
+        (struct GpioRegisters *)<span style="color:#dad085">__io_address</span>(GPIO_BASE);
+    SetGPIOFunction( LedGpioPin1, 0b001); //Output
+    SetGPIOFunction( LedGpioPin2, 0b001); //Output
+    SetGPIOFunction( gpioButton, 0); //Input
+    SetGPIOOutputValue( LedGpioPin1, !on);
+    SetGPIOOutputValue( LedGpioPin2, on);
+    irqNumber = gpio_to_irq(gpioButton);
+    printk(KERN_INFO "GPIO_TEST: The interrupt number  is: %d\n", irqNumber);
+    //IRQ_HANDLED, request_irq, is a predefined function, that helps to register interupt lines. 
+
+    int result = request_irq(irqNumber,
+                        (irq_handler_t) ebbgpio_irq_handler, 
+                        IRQF_TRIGGER_RISING,
+                        "ebb_gpio_handler",
+                        NULL);
+ 
+   printk(KERN_INFO "GPIO_TEST: The interrupt request result is: %d\n", result);
+   return result;   
+}
+
+<span style="color:#99cf50">static</span> <span style="color:#99cf50">void</span> __exit <span style="color:#89bdff">LedBlinkModule_exit</span>(void)
+{
+    SetGPIOFunction( LedGpioPin1, 0); //Configure the pin as input
+    SetGPIOFunction( LedGpioPin2, 0); //Output
+    free_irq(irqNumber, NULL);
+    gpio_free(gpioButton);
+    
+}
+<span style="color:#99cf50">static</span> irq_handler_t <span style="color:#89bdff">ebbgpio_irq_handler</span>(unsigned int irq, void *dev_id, struct pt_regs *regs){
+   on = !on;                          
+   SetGPIOOutputValue( LedGpioPin1, !on);
+   SetGPIOOutputValue( LedGpioPin2, on);         
+   printk(KERN_INFO "GPIO_TEST: Interrupt! (button state is)");     
+   return (irq_handler_t) IRQ_HANDLED;   
+}
+
+
+
+<span style="color:#89bdff">module_init</span>(LedBlinkModule_init);
+<span style="color:#89bdff">module_exit</span>(LedBlinkModule_exit);
+
+</pre>
